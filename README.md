@@ -142,4 +142,5 @@ print(decoded_text)  # Should print: Hello, ByteArt! 🚀🎨
 
 The following is a 5-paragraphs lorem-ipsum
 
-![ByteArt Example](https://github.com/AndreaRiboni/ByteArt/blob/main/data/lorem_ipsum.webp?raw=true)
+<img src="https://github.com/AndreaRiboni/ByteArt/blob/main/data/lorem_ipsum.webp?raw=true" width="200px" />
+
