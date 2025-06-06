@@ -16,7 +16,7 @@ dependencies = [
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "pillow", specifier = ">=11.2.1" },
-    { name = "pytest", extras = ["test"], specifier = ">=8.4.0" },
+    { name = "pytest", specifier = ">=8.4.0" },
 ]
 
 [[package]]

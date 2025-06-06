@@ -138,4 +138,8 @@ print(decoded_text)  # Should print: Hello, ByteArt! 🚀🎨
 - The `random_seed` ensures that the random walk is the same every time, useful for testing or reproducibility.
 - The decoding process automatically finds the start of the sequence based on the pixel graph structure — no special markers are needed.
 
----
+## Example
+
+The following is a 5-paragraphs lorem-ipsum
+
+[![lorem ipsum](lorem ipsum2 "lorem ipsum")](https://github.com/AndreaRiboni/ByteArt/blob/main/data/lorem_ipsum.webp "lorem ipsum")
