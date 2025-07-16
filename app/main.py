@@ -9,7 +9,7 @@ from codec import PNGBytesCodec
 class PNGCodecGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("PNG Bytes Codec - File Encoder/Decoder")
+        self.root.title("ByteArt-V2")
         self.root.geometry("700x600")
         
         self.random_seed = tk.StringVar()
