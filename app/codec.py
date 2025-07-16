@@ -1,9 +1,8 @@
 """
-PNG Text Codec - Encode and decode Unicode text to/from PNG images.
+PNG Bytes Codec - Encode and decode bytes to/from PNG images.
 
-This module provides functionality to hide Unicode text (including emojis and 
-non-BMP characters) inside PNG images by encoding bytes as pixel data with 
-spatial relationships indicated by color channels.
+This module provides functionality to hide any binary data inside PNG images 
+by encoding bytes as pixel data with spatial relationships indicated by color channels.
 """
 
 from __future__ import annotations
@@ -15,19 +14,19 @@ from pathlib import Path
 from PIL import Image
 
 
-class PNGTextCodec:
+class PNGBytesCodec:
     """
-    A codec for encoding/decoding Unicode text to/from PNG images.
+    A codec for encoding/decoding bytes to/from PNG images.
     
     The encoding works by:
-    1. Converting text to UTF-16 bytes
+    1. Taking raw bytes data
     2. Storing each byte pair in a pixel (R=high byte, B=low byte)
     3. Using the green channel to encode distance+direction to next pixel
        (bits 7-2 = distance, bits 1-0 = direction)
-    4. Creating a chain of pixels that can be followed to reconstruct the text
+    4. Creating a chain of pixels that can be followed to reconstruct the data
     """
     
-    # Direction encoding constants
+    # direction encoding constants
     _DIR_BITS = {
         (1, 0): 0b00,   # → right
         (-1, 0): 0b01,  # ← left
@@ -47,33 +46,27 @@ class PNGTextCodec:
     MAX_DISTANCE = 2 ** 6 - 1
 
     @classmethod
-    def encode(
+    def encode_bytes(
         cls,
-        text: str,
+        data: bytes,
         output_path: str | Path,
         *,
         random_seed: int | None = None,
     ) -> None:
         """
-        Encode text as a PNG image.
+        Encode bytes as a PNG image.
         
         Args:
-            text: Unicode string to encode (supports emojis & non-BMP chars)
+            data: Raw bytes to encode
             output_path: Where to save the PNG file
-            max_distance: Maximum step distance between pixels (1-63)
             random_seed: Seed for reproducible output (None for random)
-            
-        Raises:
-            ValueError: If max_distance is not in valid range
         """
         rng = random.Random(random_seed) if random_seed is not None else random
         
-        # Convert text to UTF-16 bytes
-        byte_seq = text.encode("utf-16", "surrogatepass")
-        if len(byte_seq) % 2:  # Ensure even length
+        byte_seq = data
+        if len(byte_seq) % 2:
             byte_seq += b"\x00"
-            
-        # Group bytes into pairs
+        
         byte_pairs = [
             (byte_seq[i], byte_seq[i + 1]) 
             for i in range(0, len(byte_seq), 2)
@@ -81,36 +74,108 @@ class PNGTextCodec:
         
         pixels = cls._encode_pixels(byte_pairs, rng)
         cls._save_image(pixels, output_path)
+
+    @classmethod
+    def encode_file(
+        cls,
+        input_path: str | Path,
+        output_path: str | Path,
+        *,
+        random_seed: int | None = None,
+    ) -> None:
+        """
+        Encode a file as a PNG image.
+        
+        Args:
+            input_path: Path to the file to encode
+            output_path: Where to save the PNG file
+            random_seed: Seed for reproducible output (None for random)
+        """
+        with open(input_path, 'rb') as f:
+            data = f.read()
+        
+        cls.encode_bytes(data, output_path, random_seed=random_seed)
+
+    @classmethod
+    def encode_text(
+        cls,
+        text: str,
+        output_path: str | Path,
+        *,
+        random_seed: int | None = None,
+    ) -> None:
+        """
+        Encode text as a PNG image (for backward compatibility).
+        
+        Args:
+            text: Unicode string to encode (supports emojis & non-BMP chars)
+            output_path: Where to save the PNG file
+            random_seed: Seed for reproducible output (None for random)
+        """
+        # text to UTF-8 bytes
+        data = text.encode("utf-8", "surrogatepass")
+        cls.encode_bytes(data, output_path, random_seed=random_seed)
     
     @classmethod
-    def decode(cls, image_path: str | Path) -> str:
+    def decode_bytes(cls, image_path: str | Path) -> bytes:
         """
-        Decode text from a PNG image created by encode().
+        Decode bytes from a PNG image created by encode_bytes().
+        
+        Args:
+            image_path: Path to the encoded PNG file
+            
+        Returns:
+            The original bytes data
+            
+        Raises:
+            ValueError: If image has no payload or broken pixel chain
+        """
+        # load non-transparent pixels
+        pixel_data = cls._load_pixel_data(image_path)
+        
+        if not pixel_data:
+            raise ValueError("No payload found in the image")
+            
+        # find starting pixel and walk the chain
+        start_pixel = cls._find_start_pixel(pixel_data)
+        byte_sequence = cls._extract_bytes(pixel_data, start_pixel)
+        
+        # convert bytes back to original data
+        data = bytes(byte_sequence)
+        
+        #  remove any trailing null padding
+        return data.rstrip(b"\x00")
+
+    @classmethod
+    def decode_to_file(
+        cls, 
+        image_path: str | Path, 
+        output_path: str | Path
+    ) -> None:
+        """
+        Decode bytes from PNG image and save to file.
+        
+        Args:
+            image_path: Path to the encoded PNG file
+            output_path: Where to save the decoded file
+        """
+        data = cls.decode_bytes(image_path)
+        with open(output_path, 'wb') as f:
+            f.write(data)
+
+    @classmethod
+    def decode_text(cls, image_path: str | Path) -> str:
+        """
+        Decode text from a PNG image (for backward compatibility).
         
         Args:
             image_path: Path to the encoded PNG file
             
         Returns:
             The original Unicode text
-            
-        Raises:
-            ValueError: If image has no payload or broken pixel chain
         """
-        # Load non-transparent pixels
-        pixel_data = cls._load_pixel_data(image_path)
-        
-        if not pixel_data:
-            raise ValueError("No payload found in the image")
-            
-        # Find starting pixel and walk the chain
-        start_pixel = cls._find_start_pixel(pixel_data)
-        byte_sequence = cls._extract_bytes(pixel_data, start_pixel)
-        
-        # Convert bytes back to text
-        text = bytes(byte_sequence).decode("utf-16", "surrogatepass")
-        
-        # Remove any trailing null padding
-        return text.rstrip("\x00")
+        data = cls.decode_bytes(image_path)
+        return data.decode("utf-8", "surrogatepass")
     
     @classmethod
     def _encode_pixels(
@@ -124,15 +189,15 @@ class PNGTextCodec:
         current_x = current_y = 0
         
         for idx, (high_byte, low_byte) in enumerate(byte_pairs):
-            # Determine green value (pointer to next pixel or EOF)
+            # determine green value (pointer to next pixel or EOF)
             if idx < len(byte_pairs) - 1:
-                # Find next available position
+                # find next available position
                 next_x, next_y, green = cls._find_next_position(
                     current_x, current_y, used_positions, rng
                 )
                 used_positions.add((next_x, next_y))
             else:
-                # Last pixel - EOF sentinel
+                # last pixel - EOF sentinel
                 green = 0
                 next_x = next_y = None
             
@@ -148,11 +213,11 @@ class PNGTextCodec:
         cls, x: int, y: int, used: set, rng
     ) -> Tuple[int, int, int]:
         """Find next available position and return coordinates + green value."""
-        directions = list(cls._DIRECTIONS)  # Copy the directions list
+        directions = list(cls._DIRECTIONS)  # copy the directions list
         
         while directions:
             dx, dy = rng.choice(directions)
-            directions.remove((dx, dy))  # Remove this direction to avoid retrying
+            directions.remove((dx, dy))  # remove this direction to avoid retrying
             
             for distance in range(1, cls.MAX_DISTANCE + 1):
                 next_x, next_y = x + dx * distance, y + dy * distance
@@ -161,7 +226,7 @@ class PNGTextCodec:
                     green = (distance << 2) | direction_code
                     return next_x, next_y, green
         
-        # If we get here, all directions at all distances are blocked
+        # all directions at all distances are blocked
         raise RuntimeError("No available positions found within max_dist")
     
     @classmethod
@@ -171,7 +236,7 @@ class PNGTextCodec:
         output_path: str | Path
     ) -> None:
         """Create and save the PNG image from pixel data."""
-        # Calculate canvas bounds
+        # calculate canvas bounds
         min_x = min(p[0] for p in pixels)
         max_x = max(p[0] for p in pixels)
         min_y = min(p[1] for p in pixels)
@@ -180,15 +245,15 @@ class PNGTextCodec:
         width = max_x - min_x + 1
         height = max_y - min_y + 1
         
-        # Create transparent canvas
+        # create transparent canvas
         canvas = [[(0, 0, 0, 0) for _ in range(width)] for _ in range(height)]
         
-        # Place pixels
+        # place pixels
         for x, y, r, g, b in pixels:
             canvas_x, canvas_y = x - min_x, y - min_y
-            canvas[canvas_y][canvas_x] = (r, g, b, 255)  # Opaque
+            canvas[canvas_y][canvas_x] = (r, g, b, 255)  # opaque
         
-        # Save image
+        # save 
         img = Image.new("RGBA", (width, height))
         img.putdata([pixel for row in canvas for pixel in row])
         img.save(Path(output_path))
@@ -204,7 +269,7 @@ class PNGTextCodec:
         for y in range(height):
             for x in range(width):
                 r, g, b, alpha = pixels[x, y]
-                if alpha:  # Non-transparent pixel
+                if alpha:  # non-transparent pixel
                     data[(x, y)] = (r, g, b)
                     
         return data
@@ -242,15 +307,19 @@ class PNGTextCodec:
                 raise ValueError("Broken pointer chain - missing target pixel")
                 
             r, g, b = pixel_data[current]
-            bytes_list.extend([r, b])  # High byte, low byte
+            bytes_list.extend([r, b])  # high byte - low byte
             
             if g == 0:  # EOF sentinel
                 break
                 
-            # Follow pointer to next pixel
+            # follow pointer to next pixel
             distance = g >> 2
             direction_code = g & 0x03
             dx, dy = cls._DIRS_DECODE[direction_code]
             current = (current[0] + dx * distance, current[1] + dy * distance)
             
         return bytes_list
+
+
+# alias
+PNGTextCodec = PNGBytesCodec
