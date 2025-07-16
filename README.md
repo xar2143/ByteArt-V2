@@ -1,146 +1,147 @@
 # ByteArt
-Encode sequences of bytes into decodable, randomizable pixel art.
 
-The idea is to come up with a reversible encoding that visualizes sequences of bytes.
+Encode any file into a decodable, randomizable pixel art image — and decode it back.
 
-No error detection or correction has been applied.
+ByteArt lets you visually encode sequences of bytes (including text, images, videos, executables, documents, etc.) into PNG files. It features a reversible, structurally connected encoding algorithm that produces pixel art reminiscent of a random walk.
 
-## Encoding
+No error detection or correction is applied.
 
-We take as input a string `S`, which is internally converted into a sequence of bytes. In this project, I am using Unicode (UTF-16), but the idea works for any finite sequence of bytes.
+---
 
-The output is an RGBA image: 8 bits per channel.
+## Highlights
 
-## Algorithm
+### 1. Improved Codec
 
-Input: a string `S` (considered as bytes).  
-Output: an RGBA image encoding `S`.
+* `PNGTextCodec` has been renamed to `PNGBytesCodec`.
+* Supports full binary encoding/decoding:
 
-The encoding works as follows:
+  * `encode_bytes()` - encode raw bytes
+  * `encode_file()` - encode any file to PNG
+  * `decode_bytes()` - decode PNG back to raw bytes
+  * `decode_to_file()` - decode PNG to original file
+  * `encode_text()` / `decode_text()` retained for compatibility
+* Works with any file format: text, images, executables, videos, etc.
 
-0. Define the current position `pos` as the origin `(0, 0)`.
-1. For each pair of bytes in `S`:
-   1. Create a new pixel `p`.
-   2. Load the next byte `b₁`, store it in `p`'s **red** channel.
-   3. Load the next byte `b₂`, store it in `p`'s **blue** channel.
-   4. Choose a random direction `dir` (right, left, down, up).
-   5. Along `dir`, find the first free spot at a distance `dist` between 1 and 63 pixels.
-      - `dist` is encoded in 6 bits, and `dir` is encoded in 2 bits.
-   6. If no free spot is found in a direction, try another one.
-   7. If no directions are left, the sequence cannot be encoded (raise an error).
-   8. Place `p` at the found position.
-   9. Encode the **green** channel as `g = (dist << 2) | dir`.
-   10. Set the **alpha** channel to 255 (opaque).
-   11. Update `pos` to be the new pixel’s position.
-2. After all bytes are processed, the last pixel sets `g = 0` to indicate end-of-data (EOF sentinel).
-3. The image may be padded with `(0, 0, 0, 0)` (transparent) pixels to form a valid rectangular image.
+### 2. Full GUI (tkinter-based)
 
-## Rationale
+* 3 main tabs:
 
-I want to create a random-walk-looking pixel art that is fully connected and aesthetically pleasing.
+  * **Encode**: File → PNG
+  * **Decode**: PNG → File
+  * **Text Mode**: Encode/decode plain text
+* Features:
 
-### Colors
-I like the red-purple-blue gradient. Hence, I decided to fill the red and blue channels with data and leave the green channel mostly close to zero as a control channel.
+  * Integrated file browser
+  * Progress bar for long operations
+  * File info (name, size)
+  * Error handling via messagebox
+  * Threaded tasks to keep UI responsive
+  * Optional random seed for reproducibility
 
-This way, the result will look purple-ish, with subtle lighter tones where the green channel activates.
+---
 
-In order to minimize the green channel’s brightness, I encode the 6 bits of distance first, followed by 2 bits for direction. 
-- Distance values are usually small (1–10), so most significant bits will often stay at 0.
-- Directions are random and uniformly distributed between 0 and 3.
+## How to Use
 
-If we had encoded the direction first, the two most significant bits would be almost always non-zero, resulting in a much brighter green channel.
+Just run `main.py`. No command-line usage required.
 
-### Connectivity
+### Encode a File
 
-When placing a pixel, we always move from an already occupied position to a new free neighbor, ensuring the pixel graph is fully connected.
+1. Go to **Encode** tab
+2. Select any file (e.g., `.jpg`, `.exe`, `.txt`, etc.)
+3. Choose where to save the resulting PNG
+4. Click **Encode File**
 
-### Sequence Start
+### Decode a File
 
-Since the resulting image can spread randomly across the canvas, the start of the sequence is identified **structurally**:
-- Every pixel points to the next pixel via its green channel.
-- The **start pixel** is the only one **not pointed to** by any other pixel.
-- During decoding, we find the start pixel by checking which pixel has no incoming pointer.
+1. Go to **Decode** tab
+2. Select a previously encoded PNG
+3. Choose where to save the decoded file
+4. Click **Decode File**
 
-This ensures that decoding can reliably find the entry point of the sequence without needing any special reserved pixel.
+### Text Mode
 
-## Example
+1. Go to **Text Mode** tab
+2. Type or paste any text
+3. Encode to image or decode from image as desired
 
-Say that the string `S` corresponds to a sequence of bytes `S_b`.  
-In this example, we assume it consists of two bytes: `01000101 00111110`.
+---
 
-| b₀ | b₁ | b₂ | b₃ | b₄ | b₅ | b₆ | b₇ | b₈ | b₉ | b₁₀ | b₁₁ | b₁₂ | b₁₃ | b₁₄ | b₁₅ |
-|----|----|----|----|----|----|----|----|----|----|-----|-----|-----|-----|-----|-----|
-| 0  | 1  | 0  | 0  | 0  | 1  | 0  | 1  | 0  | 0  | 1  | 1  | 1  | 1  | 1  | 0  |
+## Encoding Algorithm Overview
 
-- The first byte `01000101` is stored in the red channel.
-- The next byte `00111110` is stored in the blue channel.
-- Choose the direction `up` (encoded as `11`).
-- The first free pixel in this direction is at distance 1 (`000001`).
-- Encode green as `00000111`.
-- Place the pixel at `(0, 1)`.
+* Input: Sequence of bytes
+* Output: RGBA image encoding the byte stream
 
-Since the string has ended, no more pixels are added, and the last pixel's green channel is set to `0` to mark the end of the sequence.
+### Steps:
 
-## Usage
+1. Start from position (0, 0)
+2. For each byte pair (b1, b2):
 
-### Installation
+   * Store b1 in the Red channel
+   * Store b2 in the Blue channel
+   * Choose a random direction (up/down/left/right)
+   * Find a free spot in that direction within 1-63 pixels
+   * Encode the distance and direction in Green channel:
 
-Make sure you have `Pillow` installed:
+     * 6 bits for distance
+     * 2 bits for direction
+     * Green = (distance << 2) | direction
+   * Set Alpha = 255
+3. Last pixel has Green = 0 to mark EOF
+4. Image is padded with transparent pixels to form a rectangle
+
+### Connectivity & Decoding
+
+* Every pixel points to the next, forming a graph
+* The start pixel is the only one **not** pointed to by any other
+* Decoding reconstructs the byte stream by walking the graph
+
+---
+
+## Installation
+
+Python 3.7+
+
+Install dependencies:
 
 ```bash
 pip install pillow
 ```
 
-### Encoding a String
+Run the app:
 
-To encode a string into a PNG image:
-
-```python
-from png_text_codec import PNGTextCodec  # Adjust the import based on your file/module name
-
-# Your text
-text = "Hello, ByteArt! 🚀🎨"
-
-# Path to output PNG file
-output_path = "encoded_image.png"
-
-# Encode
-PNGTextCodec.encode(text, output_path, random_seed=42)  # Optional seed for reproducibility
+```bash
+python main.py
 ```
 
-- `text`: The Unicode string you want to encode (UTF-16 encoded internally, so supports emojis and special characters).
-- `output_path`: File path where the PNG image will be saved.
-- `random_seed`: (Optional) If you want the output image to be reproducible.
+---
 
-### Decoding a String
+## Example (Old Text-Based Usage)
 
-To decode the text back from the PNG image:
+> Retained for compatibility — now handled through GUI.
 
 ```python
-from png_text_codec import PNGTextCodec  # Adjust the import based on your file/module name
+from codec import PNGBytesCodec
 
-# Path to input PNG file
-input_path = "encoded_image.png"
+text = "Hello, ByteArt! \U0001F680\U0001F3A8"
+out_path = "encoded.png"
 
-# Decode
-decoded_text = PNGTextCodec.decode(input_path)
-
-print(decoded_text)  # Should print: Hello, ByteArt! 🚀🎨
+PNGBytesCodec.encode_text(text, out_path, random_seed=42)
+decoded = PNGBytesCodec.decode_text(out_path)
+print(decoded)
 ```
 
-- `input_path`: File path to the PNG image to decode.
-- Returns the original Unicode string.
+---
 
-### Notes
+## Notes
 
-- The codec fully supports any Unicode characters, including emojis and characters outside the Basic Multilingual Plane (BMP).
-- The encoded image will look like a random walk of purple-ish pixels.
-- The `random_seed` ensures that the random walk is the same every time, useful for testing or reproducibility.
-- The decoding process automatically finds the start of the sequence based on the pixel graph structure — no special markers are needed.
+* Fully supports any Unicode characters
+* Encoded images look like purple-ish random walks
+* Use random seed for reproducibility
+* Automatically locates start pixel on decoding
+* No special markers required
 
 ## Example
 
 The following is a 5-paragraphs lorem-ipsum
 
 <img src="https://github.com/AndreaRiboni/ByteArt/blob/main/data/lorem_ipsum.webp?raw=true" width="200px" />
-
