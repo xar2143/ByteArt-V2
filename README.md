@@ -1,4 +1,4 @@
-# ByteArt
+# ByteArt - V2
 
 Encode any file into a decodable, randomizable pixel art image — and decode it back.
 
